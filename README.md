@@ -1,1 +1,1 @@
-# qqBot
+# autoBot
