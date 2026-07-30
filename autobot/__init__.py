@@ -1,0 +1,1 @@
+"""autoBot core package."""

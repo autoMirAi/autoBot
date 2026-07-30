@@ -29,3 +29,13 @@ qqbot
 **/.DS_Store
 
 monster_hunter.db
+# Runtime and secrets
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+data/
+napcat/
+workspaces/
