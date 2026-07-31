@@ -1,0 +1,14 @@
+LICENSE
+README.md
+pyproject.toml
+autobot/__init__.py
+autobot/codex.py
+autobot/config.py
+autobot.egg-info/PKG-INFO
+autobot.egg-info/SOURCES.txt
+autobot.egg-info/dependency_links.txt
+autobot.egg-info/requires.txt
+autobot.egg-info/top_level.txt
+autobot/plugins/__init__.py
+autobot/plugins/codex_bot.py
+tests/test_codex.py

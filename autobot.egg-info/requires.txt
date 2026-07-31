@@ -1,0 +1,7 @@
+nonebot2[fastapi]<3,>=2.4
+nonebot-adapter-onebot<3,>=2.4
+
+[dev]
+pytest<9,>=8
+pytest-asyncio<1,>=0.24
+ruff<1,>=0.9

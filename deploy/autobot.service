@@ -1,0 +1,23 @@
+[Unit]
+Description=autoBot QQ Codex bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/data/40winters/autoBot
+EnvironmentFile=/data/40winters/autoBot/.env
+ExecStart=/data/40winters/autoBot/.venv/bin/python /data/40winters/autoBot/bot.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/40winters/autoBot/data /data/40winters/autobot-workspace
+
+[Install]
+WantedBy=multi-user.target
