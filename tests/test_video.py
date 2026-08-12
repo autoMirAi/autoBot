@@ -143,8 +143,8 @@ class ComfyUIWorkflowTests(unittest.TestCase):
         generator = workflow["104"]
         self.assertEqual(generator["class_type"], "MiniMaxH3ReferenceToVideo")
         self.assertEqual(generator["inputs"]["audio_vae"], ["24", 0])
-        self.assertEqual(generator["inputs"]["ref_image_0"], ["201", 0])
-        self.assertEqual(generator["inputs"]["ref_image_1"], ["202", 0])
+        self.assertEqual(generator["inputs"]["ref_images.ref_image_0"], ["201", 0])
+        self.assertEqual(generator["inputs"]["ref_images.ref_image_1"], ["202", 0])
         self.assertEqual(workflow["201"]["inputs"]["image"], "ref-one.png")
         self.assertEqual(workflow["202"]["inputs"]["image"], "ref-two.jpg")
 

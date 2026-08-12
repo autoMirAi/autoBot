@@ -148,7 +148,9 @@ class VideoWorker:
             missing = required - provided
             unknown = provided - required - optional
             if class_type == "MiniMaxH3ReferenceToVideo":
-                unknown = {name for name in unknown if not name.startswith("ref_image_")}
+                unknown = {
+                    name for name in unknown if not name.startswith("ref_images.ref_image_")
+                }
             if missing or unknown:
                 raise WorkerError(
                     f"ComfyUI schema mismatch at node {node_id} ({class_type}): "
@@ -314,7 +316,7 @@ class VideoWorker:
                     "class_type": "LoadImage",
                     "inputs": {"image": name},
                 }
-                generator_inputs[f"ref_image_{offset}"] = [node_id, 0]
+                generator_inputs[f"ref_images.ref_image_{offset}"] = [node_id, 0]
         return workflow
 
     def download_reference(self, job_id: str, index: int, directory: Path) -> Path:
