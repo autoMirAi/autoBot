@@ -68,6 +68,7 @@ class VideoWorker:
     def __init__(self, config: WorkerConfig):
         self.config = config
         self.client_id = uuid.uuid4().hex
+        self._schema_validated = False
 
     @property
     def _server_headers(self) -> dict[str, str]:
@@ -110,6 +111,40 @@ class VideoWorker:
             headers=self._server_headers,
         )
         self._request_json("GET", f"{self.config.comfy_url}/system_stats")
+        if not self._schema_validated:
+            self.validate_workflow_schema()
+            self._schema_validated = True
+
+    def validate_workflow_schema(self) -> None:
+        sample = {
+            "id": "schema-check",
+            "prompt": "schema check",
+            "duration": 5,
+            "ratio": "16:9",
+            "resolution": "0.4MP",
+            "seed": 1,
+        }
+        workflow = self.build_workflow(sample)
+        for node_id, node in workflow.items():
+            class_type = str(node["class_type"])
+            definition_payload = self._request_json(
+                "GET",
+                f"{self.config.comfy_url}/object_info/{urllib.parse.quote(class_type)}",
+            )
+            definition = definition_payload.get(class_type)
+            if not isinstance(definition, dict):
+                raise WorkerError(f"ComfyUI node is unavailable: {class_type}")
+            input_definition = definition.get("input") or {}
+            required = set((input_definition.get("required") or {}).keys())
+            optional = set((input_definition.get("optional") or {}).keys())
+            provided = set((node.get("inputs") or {}).keys())
+            missing = required - provided
+            unknown = provided - required - optional
+            if missing or unknown:
+                raise WorkerError(
+                    f"ComfyUI schema mismatch at node {node_id} ({class_type}): "
+                    f"missing={sorted(missing)}, unknown={sorted(unknown)}"
+                )
 
     def claim(self) -> dict[str, Any] | None:
         payload = self._request_json(
