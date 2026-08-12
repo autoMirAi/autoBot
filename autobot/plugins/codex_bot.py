@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.exception import FinishedException
 
-from autobot.codex import CodexRunner
+from autobot.codex import CodexRunner, memory_edit_request
 from autobot.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -23,12 +23,13 @@ runner = CodexRunner(settings)
 matcher = on_message(priority=20, block=False)
 
 HELP = """可用命令：
-/ask 问题 - 让 Codex 只读回答
-/do 任务 - 让 Codex 执行操作（仅授权用户）
+/ask 问题 - 让 Codex 回答或执行任务（可读写工作区）
+/memory_add 内容 - 追加或合并动态记忆（仅授权用户）
+/memory_del 内容 - 删除或修改动态记忆（仅授权用户）
 /reset - 清除当前群聊或私聊的对话上下文
 /status - 查看状态
 /help - 显示帮助
-群里可以直接 @我 提问；操作员私聊时可以直接发送问题。"""
+群里可以直接 @我；私聊可以直接发送问题或任务。"""
 
 
 def _scope(event: MessageEvent) -> str:
@@ -67,13 +68,20 @@ def _with_reply_context(event: MessageEvent, current_text: str) -> str:
 
 def _parse(event: MessageEvent) -> tuple[str, str] | None:
     text = event.get_plaintext().strip()
-    for command in ("/ask", "/do", "/reset", "/status", "/help"):
+    for command in (
+        "/memory_add",
+        "/memory_del",
+        "/ask",
+        "/reset",
+        "/status",
+        "/help",
+    ):
         if text == command:
-            prompt = _with_reply_context(event, "") if command in {"/ask", "/do"} else ""
+            prompt = _with_reply_context(event, "") if command == "/ask" else ""
             return command, prompt
         if text.startswith(command + " "):
             prompt = text[len(command) :].strip()
-            if command in {"/ask", "/do"}:
+            if command == "/ask":
                 prompt = _with_reply_context(event, prompt)
             return command, prompt
     if isinstance(event, PrivateMessageEvent):
@@ -90,9 +98,6 @@ async def handle(bot: Bot, event: MessageEvent) -> None:
         group_id = str(event.group_id)
         if settings.allowed_group_ids and group_id not in settings.allowed_group_ids:
             return
-    elif user_id not in settings.operator_qq_ids:
-        await matcher.finish(Message("私聊调试仅限已配置的操作员。"))
-        return
 
     parsed = _parse(event)
     if parsed is None:
@@ -117,16 +122,37 @@ async def handle(bot: Bot, event: MessageEvent) -> None:
         runner.reset(f"{scope}:read")
         runner.reset(f"{scope}:write")
         await matcher.finish(Message("当前对话的 Codex 上下文已清除。"))
-    if command == "/do" and user_id not in settings.operator_qq_ids:
+    operator_commands = {"/memory_add", "/memory_del"}
+    if command in operator_commands and user_id not in settings.operator_qq_ids:
         await matcher.finish(Message("你没有执行操作的权限。"))
 
-    writable = command == "/do"
     if not prompt:
         await matcher.finish(Message("请在命令后写明问题或任务。"))
 
+    memory_operation = {
+        "/memory_add": "add",
+        "/memory_del": "delete",
+    }.get(command)
+    allow_memory_edit = memory_operation is not None
+    if memory_operation is not None:
+        prompt = memory_edit_request(
+            runner.memory_prompt_path,
+            memory_operation,
+            prompt,
+        )
+        scope = f"memory:{user_id}"
+
+    writable = True
+
     await matcher.send(Message("喵呜~我看看喵"))
     try:
-        result = await runner.ask(scope, prompt, writable=writable)
+        result = await runner.ask(
+            scope,
+            prompt,
+            writable=writable,
+            allow_memory_edit=allow_memory_edit,
+            ephemeral=allow_memory_edit,
+        )
         await matcher.finish(Message(result.text))
     except FinishedException:
         raise

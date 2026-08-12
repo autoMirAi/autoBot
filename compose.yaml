@@ -6,6 +6,7 @@ services:
     environment:
       NAPCAT_UID: "0"
       NAPCAT_GID: "0"
+      ACCOUNT: "255616290"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

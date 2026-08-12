@@ -25,6 +25,17 @@ QQ / NapCatQQ -> OneBot 11 reverse WebSocket -> NoneBot2 -> Codex CLI
 - `/status`：查看连接和任务状态。
 - `/help`：查看帮助。
 
+## 一键启停
+
+部署完成后，使用以下脚本管理 NoneBot 与 NapCat：
+
+```bash
+sudo ./start.sh
+sudo ./stop.sh
+```
+
+`start.sh` 会启动服务、显示 NapCat WebUI 的本地访问地址、Token 和 SSH 隧道命令；WebUI 始终只监听服务器本机，不会暴露到公网。`stop.sh` 不会删除 QQ 登录状态、NapCat 配置或开机自启设置。
+
 ## 部署
 
 详细步骤见 [docs/deployment.md](docs/deployment.md)。复制 `.env.example` 为

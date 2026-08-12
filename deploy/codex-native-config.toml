@@ -1,0 +1,16 @@
+model = "deepseek-v4-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+model_reasoning_effort = "low"
+model_catalog_json = "/run/autobot-codex/models.json"
+web_search = "live"
+
+[sandbox_workspace_write]
+network_access = true
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+wire_api = "responses"
+experimental_bearer_token = __DEEPSEEK_API_KEY__
