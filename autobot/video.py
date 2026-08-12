@@ -25,7 +25,7 @@ class VideoJobError(RuntimeError):
 
 
 def parse_video_options(
-    text: str, *, max_duration: int = 30, max_prompt_chars: int = 1200
+    text: str, *, max_duration: int = 30, max_prompt_chars: int = 5000
 ) -> tuple[str, int, str, int, int | None]:
     try:
         parts = shlex.split(text)

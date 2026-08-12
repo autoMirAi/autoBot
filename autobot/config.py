@@ -58,7 +58,7 @@ class Settings:
     video_public_base_url: str = "http://host.docker.internal:8080"
     video_output_dir: Path = Path("/data/40winters/autoBot/data/video")
     video_reference_dir: Path = Path("/data/40winters/autoBot/data/video-references")
-    video_max_prompt_chars: int = 1200
+    video_max_prompt_chars: int = 5000
     video_max_file_bytes: int = 80 * 1024 * 1024
     video_max_reference_bytes: int = 15 * 1024 * 1024
     video_max_queued: int = 10
@@ -94,7 +94,7 @@ class Settings:
             video_reference_dir=Path(
                 os.getenv("VIDEO_REFERENCE_DIR", str(state_dir / "video-references"))
             ),
-            video_max_prompt_chars=_positive_int("VIDEO_MAX_PROMPT_CHARS", 1200),
+            video_max_prompt_chars=_positive_int("VIDEO_MAX_PROMPT_CHARS", 5000),
             video_max_file_bytes=_positive_int("VIDEO_MAX_FILE_BYTES", 80 * 1024 * 1024),
             video_max_reference_bytes=_positive_int(
                 "VIDEO_MAX_REFERENCE_BYTES", 15 * 1024 * 1024

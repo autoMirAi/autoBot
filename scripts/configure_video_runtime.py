@@ -61,6 +61,7 @@ def main() -> int:
             "VIDEO_PUBLIC_BASE_URL": "http://host.docker.internal:8080",
             "VIDEO_MAX_DURATION_SECONDS": "30",
             "VIDEO_JOB_TIMEOUT_SECONDS": "5400",
+            "VIDEO_MAX_PROMPT_CHARS": "5000",
         },
     )
 
