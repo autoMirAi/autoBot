@@ -247,7 +247,7 @@ async def handle_video(event: GroupMessageEvent, args: Message = command_arg) ->
             prompt=prompt,
             duration=duration,
             ratio=ratio,
-            resolution="768P",
+            resolution="0.4MP",
             seed=seed,
             daily_user_limit=settings.video_daily_limit_per_user,
             daily_global_limit=settings.video_daily_limit_global,
@@ -260,7 +260,7 @@ async def handle_video(event: GroupMessageEvent, args: Message = command_arg) ->
     await video_matcher.finish(
         Message(
             f"视频任务已进入队列。\n任务：{job.id}\n"
-            f"规格：{duration} 秒 · 768P · {ratio}\n当前排队：第 {position or 1} 位"
+            f"规格：{duration} 秒 · 约 0.4MP · {ratio}\n当前排队：第 {position or 1} 位"
         )
     )
 

@@ -30,8 +30,6 @@ class WorkerConfig:
     worker_token: str
     comfy_url: str
     worker_id: str
-    comfy_api_key: str
-    comfy_auth_token: str
     poll_seconds: float
 
     @classmethod
@@ -55,16 +53,12 @@ class WorkerConfig:
             worker_id=setting(
                 "AUTOBOT_VIDEO_WORKER_ID", "worker_id", socket.gethostname().lower()
             ),
-            comfy_api_key=setting("COMFY_API_KEY", "comfy_api_key"),
-            comfy_auth_token=setting("COMFY_AUTH_TOKEN", "comfy_auth_token"),
             poll_seconds=float(setting("AUTOBOT_VIDEO_POLL_SECONDS", "poll_seconds", "3")),
         )
         if not config.server_url:
             raise WorkerError("AUTOBOT_VIDEO_SERVER_URL is not configured")
         if len(config.worker_token) < 32:
             raise WorkerError("AUTOBOT_VIDEO_WORKER_TOKEN is missing or too short")
-        if not config.comfy_api_key and not config.comfy_auth_token:
-            raise WorkerError("COMFY_API_KEY or COMFY_AUTH_TOKEN is required for MiniMax H3")
         if not 0.5 <= config.poll_seconds <= 60:
             raise WorkerError("poll_seconds must be between 0.5 and 60")
         return config
@@ -147,27 +141,114 @@ class VideoWorker:
             return
 
     @staticmethod
+    def dimensions_for_ratio(ratio: str) -> tuple[int, int]:
+        dimensions = {
+            "16:9": (864, 480),
+            "4:3": (736, 544),
+            "1:1": (640, 640),
+            "3:4": (544, 736),
+            "9:16": (480, 864),
+            "21:9": (960, 416),
+        }
+        try:
+            return dimensions[ratio]
+        except KeyError as exc:
+            raise WorkerError(f"Unsupported aspect ratio: {ratio}") from exc
+
+    @staticmethod
     def build_workflow(job: dict[str, Any]) -> dict[str, Any]:
         job_id = str(job["id"])
+        width, height = VideoWorker.dimensions_for_ratio(str(job["ratio"]))
+        duration = int(job["duration"])
+        frames = max(5, round(duration * 24))
+        frames += (5 - frames % 17) % 17
         return {
+            "11": {
+                "class_type": "VAELoader",
+                "inputs": {"vae_name": "minimax_h3_video_vae_fp16.safetensors"},
+            },
+            "24": {
+                "class_type": "VAELoader",
+                "inputs": {"vae_name": "minimax_h3_audio_vae_fp32.safetensors"},
+            },
             "23": {
-                "class_type": "MinimaxHailuo03TextToVideoNode",
+                "class_type": "VAEDecodeAudio",
+                "inputs": {"samples": ["14", 0], "vae": ["24", 0]},
+            },
+            "10": {
+                "class_type": "VAEDecode",
+                "inputs": {"samples": ["14", 0], "vae": ["11", 0]},
+            },
+            "17": {
+                "class_type": "KSamplerSelect",
+                "inputs": {"sampler_name": "res_multistep"},
+            },
+            "9": {
+                "class_type": "BasicScheduler",
                 "inputs": {
-                    "model": {
-                        "model": "MiniMax H3",
-                        "prompt": str(job["prompt"]),
-                        "resolution": str(job["resolution"]),
-                        "ratio": str(job["ratio"]),
-                        "duration": int(job["duration"]),
-                    },
-                    "seed": int(job["seed"]),
-                    "watermark": False,
+                    "model": ["6", 0],
+                    "scheduler": "simple",
+                    "steps": 20,
+                    "denoise": 1.0,
                 },
             },
-            "8": {
+            "14": {
+                "class_type": "SamplerCustomAdvanced",
+                "inputs": {
+                    "noise": ["15", 0],
+                    "guider": ["16", 0],
+                    "sampler": ["17", 0],
+                    "sigmas": ["9", 0],
+                    "latent_image": ["104", 1],
+                },
+            },
+            "16": {
+                "class_type": "BasicGuider",
+                "inputs": {"model": ["6", 0], "conditioning": ["104", 0]},
+            },
+            "6": {
+                "class_type": "UNETLoader",
+                "inputs": {
+                    "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                    "weight_dtype": "default",
+                },
+            },
+            "13": {
+                "class_type": "CLIPLoader",
+                "inputs": {
+                    "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+                    "type": "minimax",
+                    "device": "default",
+                },
+            },
+            "15": {
+                "class_type": "RandomNoise",
+                "inputs": {"noise_seed": int(job["seed"])},
+            },
+            "91": {
+                "class_type": "CreateVideo",
+                "inputs": {
+                    "images": ["10", 0],
+                    "audio": ["23", 0],
+                    "fps": 24.0,
+                    "bit_depth": 8,
+                },
+            },
+            "104": {
+                "class_type": "MiniMaxH3ImageToVideo",
+                "inputs": {
+                    "clip": ["13", 0],
+                    "vae": ["11", 0],
+                    "prompt": str(job["prompt"]),
+                    "width": width,
+                    "height": height,
+                    "length": frames,
+                },
+            },
+            "92": {
                 "class_type": "SaveVideo",
                 "inputs": {
-                    "video": ["23", 0],
+                    "video": ["91", 0],
                     "filename_prefix": f"autobot/{job_id}",
                     "format": "mp4",
                     "codec": {"codec": "auto"},
@@ -176,18 +257,13 @@ class VideoWorker:
         }
 
     def queue_comfyui(self, job: dict[str, Any]) -> str:
-        extra_data: dict[str, str] = {"comfy_usage_source": "autobot-video-worker"}
-        if self.config.comfy_api_key:
-            extra_data["api_key_comfy_org"] = self.config.comfy_api_key
-        else:
-            extra_data["auth_token_comfy_org"] = self.config.comfy_auth_token
         response = self._request_json(
             "POST",
             f"{self.config.comfy_url}/prompt",
             {
                 "prompt": self.build_workflow(job),
                 "client_id": self.client_id,
-                "extra_data": extra_data,
+                "extra_data": {"comfy_usage_source": "autobot-video-worker"},
             },
             {"Content-Type": "application/json"},
         )

@@ -81,7 +81,7 @@ class VideoJobStoreTests(unittest.TestCase):
 
 
 class ComfyUIWorkflowTests(unittest.TestCase):
-    def test_builds_locked_minimax_h3_workflow(self) -> None:
+    def test_builds_locked_local_minimax_h3_workflow(self) -> None:
         workflow = VideoWorker.build_workflow(
             {
                 "id": "abc123",
@@ -92,12 +92,14 @@ class ComfyUIWorkflowTests(unittest.TestCase):
                 "seed": 7,
             }
         )
-        generator = workflow["23"]
-        self.assertEqual(generator["class_type"], "MinimaxHailuo03TextToVideoNode")
-        self.assertEqual(generator["inputs"]["model"]["prompt"], "a cinematic cat")
-        self.assertEqual(generator["inputs"]["model"]["ratio"], "9:16")
-        self.assertEqual(workflow["8"]["inputs"]["video"], ["23", 0])
-        self.assertEqual(workflow["8"]["inputs"]["format"], "mp4")
+        generator = workflow["104"]
+        self.assertEqual(generator["class_type"], "MiniMaxH3ImageToVideo")
+        self.assertEqual(generator["inputs"]["prompt"], "a cinematic cat")
+        self.assertEqual(generator["inputs"]["width"], 480)
+        self.assertEqual(generator["inputs"]["height"], 864)
+        self.assertEqual(generator["inputs"]["length"], 124)
+        self.assertEqual(workflow["92"]["inputs"]["video"], ["91", 0])
+        self.assertEqual(workflow["92"]["inputs"]["format"], "mp4")
 
     def test_finds_nested_video_metadata(self) -> None:
         metadata = VideoWorker._find_video_metadata(

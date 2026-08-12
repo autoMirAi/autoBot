@@ -50,7 +50,7 @@ docker compose up -d napcat
 ## Windows ComfyUI 视频 Worker
 
 视频任务使用持久化 SQLite 队列，Windows Worker 主动从 server 领取任务，调用本机
-ComfyUI MiniMax H3 工作流，生成完成后把 MP4 上传回 server，再由 NapCat 发回原群。
+ComfyUI 本地 MiniMax H3 工作流，生成完成后把 MP4 上传回 server，再由 NapCat 发回原群。
 ComfyUI 本身只需监听 `127.0.0.1:8188`，不要把 ComfyUI 端口开放到局域网。
 
 server 的 `.env` 至少配置：
@@ -68,8 +68,7 @@ Windows 在 `workers/worker.json` 放置未跟踪的配置：
   "server_url": "http://192.168.8.165:8080/video-worker/v1",
   "worker_token": "与 server 相同的随机值",
   "comfy_url": "http://127.0.0.1:8188",
-  "worker_id": "windows-4080",
-  "comfy_api_key": "Comfy API key"
+  "worker_id": "windows-4080"
 }
 ```
 
