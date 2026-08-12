@@ -385,7 +385,13 @@ class VideoWorker:
             self.upload_result(job_id, output)
 
     def run_forever(self) -> None:
-        self.health()
+        while True:
+            try:
+                self.health()
+                break
+            except WorkerError as exc:
+                print(f"waiting for server and ComfyUI: {exc}", file=sys.stderr, flush=True)
+                time.sleep(10)
         print(
             f"autoBot video worker ready: {self.config.worker_id} -> {self.config.server_url}",
             flush=True,
@@ -414,6 +420,13 @@ class VideoWorker:
 
 
 def main() -> int:
+    lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock.bind(("127.0.0.1", 53182))
+        lock.listen(1)
+    except OSError:
+        print("another autoBot video worker is already running", file=sys.stderr)
+        return 0
     try:
         VideoWorker(WorkerConfig.load()).run_forever()
     except KeyboardInterrupt:
