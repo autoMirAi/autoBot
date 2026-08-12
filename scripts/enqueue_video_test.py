@@ -75,8 +75,6 @@ def main() -> int:
             ratio="16:9",
             resolution="0.4MP",
             seed=secrets.randbelow(2**32),
-            daily_user_limit=positive(values, "VIDEO_DAILY_LIMIT_PER_USER", 2),
-            daily_global_limit=positive(values, "VIDEO_DAILY_LIMIT_GLOBAL", 10),
             max_queued=positive(values, "VIDEO_MAX_QUEUED", 10),
         )
         print(f"job_id={job.id}; group_id={group_id}; user_id={user_id}")

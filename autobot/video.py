@@ -8,7 +8,6 @@ import time
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO
 
@@ -130,11 +129,6 @@ class VideoJobStore:
             ).fetchone()[0]
         return int(count)
 
-    @staticmethod
-    def _local_day_start() -> int:
-        now = datetime.now().astimezone()
-        return int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-
     def create(
         self,
         *,
@@ -146,12 +140,9 @@ class VideoJobStore:
         ratio: str,
         resolution: str,
         seed: int,
-        daily_user_limit: int,
-        daily_global_limit: int,
         max_queued: int,
     ) -> VideoJob:
         now = int(time.time())
-        day_start = self._local_day_start()
         job_id = uuid.uuid4().hex[:12]
         with self._lock:
             connection = self._connection
@@ -164,20 +155,6 @@ class VideoJobStore:
                 ).fetchone()[0]
                 if active_user:
                     raise VideoJobError("你已经有一个视频任务在处理中，请等待完成后再提交。")
-
-                daily_user = connection.execute(
-                    "SELECT COUNT(*) FROM video_jobs WHERE user_id = ? AND created_at >= ?",
-                    (user_id, day_start),
-                ).fetchone()[0]
-                if daily_user >= daily_user_limit:
-                    raise VideoJobError(f"你今天的视频额度已用完（每日 {daily_user_limit} 次）。")
-
-                daily_global = connection.execute(
-                    "SELECT COUNT(*) FROM video_jobs WHERE created_at >= ?",
-                    (day_start,),
-                ).fetchone()[0]
-                if daily_global >= daily_global_limit:
-                    raise VideoJobError("今天的全局视频额度已用完，请明天再试。")
 
                 queued = connection.execute(
                     "SELECT COUNT(*) FROM video_jobs WHERE status = 'queued'"

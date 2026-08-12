@@ -17,8 +17,6 @@ def create_job(store: VideoJobStore, user_id: str = "100"):
         ratio="16:9",
         resolution="768P",
         seed=42,
-        daily_user_limit=2,
-        daily_global_limit=10,
         max_queued=10,
     )
 
@@ -48,7 +46,7 @@ class VideoJobStoreTests(unittest.TestCase):
             self.assertEqual(store.get(job.id).status, "completed")
             store.close()
 
-    def test_prevents_parallel_jobs_and_enforces_daily_limit(self) -> None:
+    def test_prevents_parallel_jobs_without_daily_limit(self) -> None:
         with TemporaryDirectory() as directory:
             store = VideoJobStore(Path(directory) / "video.sqlite3")
             first = create_job(store)
@@ -58,8 +56,8 @@ class VideoJobStoreTests(unittest.TestCase):
 
             second = create_job(store)
             store.cancel(second.id, "100")
-            with self.assertRaisesRegex(VideoJobError, "额度已用完"):
-                create_job(store)
+            third = create_job(store)
+            self.assertEqual(third.status, "queued")
             store.close()
 
     def test_expired_claim_is_requeued(self) -> None:

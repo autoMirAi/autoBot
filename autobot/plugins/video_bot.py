@@ -249,8 +249,6 @@ async def handle_video(event: GroupMessageEvent, args: Message = command_arg) ->
             ratio=ratio,
             resolution="0.4MP",
             seed=seed,
-            daily_user_limit=settings.video_daily_limit_per_user,
-            daily_global_limit=settings.video_daily_limit_global,
             max_queued=settings.video_max_queued,
         )
         position = await asyncio.to_thread(store.queue_position, job.id)

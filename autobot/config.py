@@ -59,8 +59,6 @@ class Settings:
     video_output_dir: Path = Path("/data/40winters/autoBot/data/video")
     video_max_prompt_chars: int = 1200
     video_max_file_bytes: int = 80 * 1024 * 1024
-    video_daily_limit_per_user: int = 2
-    video_daily_limit_global: int = 10
     video_max_queued: int = 10
     video_claim_lease_seconds: int = 90
     video_job_timeout_seconds: int = 1800
@@ -93,8 +91,6 @@ class Settings:
             video_output_dir=Path(os.getenv("VIDEO_OUTPUT_DIR", str(state_dir / "video"))),
             video_max_prompt_chars=_positive_int("VIDEO_MAX_PROMPT_CHARS", 1200),
             video_max_file_bytes=_positive_int("VIDEO_MAX_FILE_BYTES", 80 * 1024 * 1024),
-            video_daily_limit_per_user=_positive_int("VIDEO_DAILY_LIMIT_PER_USER", 2),
-            video_daily_limit_global=_positive_int("VIDEO_DAILY_LIMIT_GLOBAL", 10),
             video_max_queued=_positive_int("VIDEO_MAX_QUEUED", 10),
             video_claim_lease_seconds=_positive_int("VIDEO_CLAIM_LEASE_SECONDS", 90),
             video_job_timeout_seconds=_positive_int("VIDEO_JOB_TIMEOUT_SECONDS", 1800),
