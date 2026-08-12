@@ -80,24 +80,30 @@ class VideoJobStoreTests(unittest.TestCase):
 
 class VideoRequestTests(unittest.TestCase):
     def test_defaults_to_five_seconds(self) -> None:
-        prompt, duration, ratio, _ = parse_video_options("a cat running")
-        self.assertEqual((prompt, duration, ratio), ("a cat running", 5, "16:9"))
+        prompt, duration, ratio, _, pictures = parse_video_options("a cat running")
+        self.assertEqual((prompt, duration, ratio, pictures), ("a cat running", 5, "16:9", None))
 
     def test_short_seconds_option_supports_thirty_seconds(self) -> None:
-        prompt, duration, ratio, _ = parse_video_options("-s 15 --ratio 9:16 neon cat")
+        prompt, duration, ratio, _, _ = parse_video_options("-s 15 --ratio 9:16 neon cat")
         self.assertEqual((prompt, duration, ratio), ("neon cat", 15, "9:16"))
 
-        _, duration, _, _ = parse_video_options("-s 30 maximum duration")
+        _, duration, _, _, _ = parse_video_options("-s 30 maximum duration")
         self.assertEqual(duration, 30)
 
     def test_long_seconds_options_remain_compatible(self) -> None:
         for option in ("--seconds", "--duration"):
-            _, duration, _, _ = parse_video_options(f"{option} 15 neon cat")
+            _, duration, _, _, _ = parse_video_options(f"{option} 15 neon cat")
             self.assertEqual(duration, 15)
 
     def test_rejects_duration_above_thirty_seconds(self) -> None:
         with self.assertRaisesRegex(VideoJobError, "5 到 30 秒"):
             parse_video_options("-s 31 too long")
+
+    def test_picture_count_option(self) -> None:
+        prompt, _, _, _, pictures = parse_video_options("-p 2 two characters meet")
+        self.assertEqual((prompt, pictures), ("two characters meet", 2))
+        with self.assertRaisesRegex(VideoJobError, "1 到 9"):
+            parse_video_options("-p 10 too many")
 
 
 class ComfyUIWorkflowTests(unittest.TestCase):
@@ -121,6 +127,26 @@ class ComfyUIWorkflowTests(unittest.TestCase):
         self.assertEqual(workflow["92"]["inputs"]["video"], ["91", 0])
         self.assertEqual(workflow["92"]["inputs"]["format"], "mp4")
         self.assertEqual(workflow["92"]["inputs"]["codec"], "auto")
+
+    def test_builds_reference_to_video_workflow(self) -> None:
+        workflow = VideoWorker.build_workflow(
+            {
+                "id": "ref123",
+                "prompt": "<Picture 1> meets <Picture 2>",
+                "duration": 5,
+                "ratio": "16:9",
+                "resolution": "0.4MP",
+                "seed": 8,
+            },
+            ["ref-one.png", "ref-two.jpg"],
+        )
+        generator = workflow["104"]
+        self.assertEqual(generator["class_type"], "MiniMaxH3ReferenceToVideo")
+        self.assertEqual(generator["inputs"]["audio_vae"], ["24", 0])
+        self.assertEqual(generator["inputs"]["ref_image_0"], ["201", 0])
+        self.assertEqual(generator["inputs"]["ref_image_1"], ["202", 0])
+        self.assertEqual(workflow["201"]["inputs"]["image"], "ref-one.png")
+        self.assertEqual(workflow["202"]["inputs"]["image"], "ref-two.jpg")
 
     def test_finds_nested_video_metadata(self) -> None:
         metadata = VideoWorker._find_video_metadata(

@@ -124,7 +124,14 @@ class VideoWorker:
             "resolution": "0.4MP",
             "seed": 1,
         }
-        workflow = self.build_workflow(sample)
+        workflows = [
+            self.build_workflow(sample),
+            self.build_workflow(sample | {"reference_count": 2}, ["schema-1.png", "schema-2.png"]),
+        ]
+        for workflow in workflows:
+            self._validate_nodes(workflow)
+
+    def _validate_nodes(self, workflow: dict[str, Any]) -> None:
         for node_id, node in workflow.items():
             class_type = str(node["class_type"])
             definition_payload = self._request_json(
@@ -140,6 +147,8 @@ class VideoWorker:
             provided = set((node.get("inputs") or {}).keys())
             missing = required - provided
             unknown = provided - required - optional
+            if class_type == "MiniMaxH3ReferenceToVideo":
+                unknown = {name for name in unknown if not name.startswith("ref_image_")}
             if missing or unknown:
                 raise WorkerError(
                     f"ComfyUI schema mismatch at node {node_id} ({class_type}): "
@@ -191,13 +200,15 @@ class VideoWorker:
             raise WorkerError(f"Unsupported aspect ratio: {ratio}") from exc
 
     @staticmethod
-    def build_workflow(job: dict[str, Any]) -> dict[str, Any]:
+    def build_workflow(
+        job: dict[str, Any], reference_names: list[str] | None = None
+    ) -> dict[str, Any]:
         job_id = str(job["id"])
         width, height = VideoWorker.dimensions_for_ratio(str(job["ratio"]))
         duration = int(job["duration"])
         frames = max(5, round(duration * 24))
         frames += (5 - frames % 17) % 17
-        return {
+        workflow = {
             "11": {
                 "class_type": "VAELoader",
                 "inputs": {"vae_name": "minimax_h3_video_vae_fp16.safetensors"},
@@ -292,13 +303,92 @@ class VideoWorker:
                 },
             },
         }
+        if reference_names:
+            generator_inputs = workflow["104"]["inputs"]
+            generator_inputs["audio_vae"] = ["24", 0]
+            generator_inputs["ref_image_size"] = "match"
+            workflow["104"]["class_type"] = "MiniMaxH3ReferenceToVideo"
+            for offset, name in enumerate(reference_names):
+                node_id = str(201 + offset)
+                workflow[node_id] = {
+                    "class_type": "LoadImage",
+                    "inputs": {"image": name},
+                }
+                generator_inputs[f"ref_image_{offset}"] = [node_id, 0]
+        return workflow
 
-    def queue_comfyui(self, job: dict[str, Any]) -> str:
+    def download_reference(self, job_id: str, index: int, directory: Path) -> Path:
+        headers = dict(self._server_headers)
+        headers["X-Worker-ID"] = self.config.worker_id
+        request = urllib.request.Request(
+            f"{self.config.server_url}/jobs/{job_id}/references/{index}", headers=headers
+        )
+        destination: Path | None = None
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                extension = response.headers.get("X-Reference-Extension", "").lower()
+                if extension not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
+                    raise WorkerError("Server returned an unsupported reference image type")
+                destination = directory / f"reference-{index:02d}{extension}"
+                with destination.open("wb") as output:
+                    while chunk := response.read(1024 * 1024):
+                        output.write(chunk)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(1000).decode("utf-8", errors="replace")
+            raise WorkerError(f"Reference download failed with HTTP {exc.code}: {detail}") from exc
+        except OSError as exc:
+            raise WorkerError(f"Reference download failed: {exc}") from exc
+        if destination is None:
+            raise WorkerError("Reference download did not produce a file")
+        return destination
+
+    def upload_comfyui_image(self, path: Path, job_id: str, index: int) -> str:
+        boundary = f"----autobot{uuid.uuid4().hex}"
+        filename = f"{job_id}-{index:02d}{path.suffix.lower()}"
+        content_type = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }.get(path.suffix.lower(), "application/octet-stream")
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode() + path.read_bytes() + (
+            f"\r\n--{boundary}\r\n"
+            'Content-Disposition: form-data; name="type"\r\n\r\ninput\r\n'
+            f"--{boundary}--\r\n"
+        ).encode()
+        request = urllib.request.Request(
+            f"{self.config.comfy_url}/upload/image",
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(body)),
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                payload = json.loads(response.read())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise WorkerError(f"Failed to upload reference image to ComfyUI: {exc}") from exc
+        name = payload.get("name")
+        subfolder = str(payload.get("subfolder", "")).strip("/\\")
+        if not isinstance(name, str) or not name:
+            raise WorkerError(f"Invalid ComfyUI image upload response: {payload}")
+        return f"{subfolder}/{name}" if subfolder else name
+
+    def queue_comfyui(
+        self, job: dict[str, Any], reference_names: list[str] | None = None
+    ) -> str:
         response = self._request_json(
             "POST",
             f"{self.config.comfy_url}/prompt",
             {
-                "prompt": self.build_workflow(job),
+                "prompt": self.build_workflow(job, reference_names),
                 "client_id": self.client_id,
                 "extra_data": {"comfy_usage_source": "autobot-video-worker"},
             },
@@ -413,9 +503,15 @@ class VideoWorker:
     def process(self, job: dict[str, Any]) -> None:
         job_id = str(job["id"])
         self.heartbeat(job_id, 1)
-        prompt_id = self.queue_comfyui(job)
-        metadata = self.wait_for_result(job, prompt_id)
         with tempfile.TemporaryDirectory(prefix="autobot-video-") as directory:
+            temporary_root = Path(directory)
+            reference_names: list[str] = []
+            for index in range(1, int(job.get("reference_count", 0)) + 1):
+                reference = self.download_reference(job_id, index, temporary_root)
+                reference_names.append(self.upload_comfyui_image(reference, job_id, index))
+            self.heartbeat(job_id, 3)
+            prompt_id = self.queue_comfyui(job, reference_names)
+            metadata = self.wait_for_result(job, prompt_id)
             output = Path(directory) / f"{job_id}.mp4"
             self.download_comfyui_result(metadata, output)
             self.heartbeat(job_id, 95)

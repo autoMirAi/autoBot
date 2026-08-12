@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import shlex
+import shutil
 import sqlite3
 import threading
 import time
@@ -24,7 +26,7 @@ class VideoJobError(RuntimeError):
 
 def parse_video_options(
     text: str, *, max_duration: int = 30, max_prompt_chars: int = 1200
-) -> tuple[str, int, str, int]:
+) -> tuple[str, int, str, int, int | None]:
     try:
         parts = shlex.split(text)
     except ValueError as exc:
@@ -33,6 +35,7 @@ def parse_video_options(
     duration = 5
     ratio = "16:9"
     seed = secrets.randbelow(2**32)
+    picture_count: int | None = None
     index = 0
     while index < len(parts) and parts[index].startswith("-"):
         option = parts[index]
@@ -47,6 +50,13 @@ def parse_video_options(
                 raise VideoJobError(f"{option} 必须是整数。") from exc
             if not 5 <= duration <= max_duration:
                 raise VideoJobError(f"当前仅允许 5 到 {max_duration} 秒视频。")
+        elif option in {"-p", "--pictures"}:
+            try:
+                picture_count = int(value)
+            except ValueError as exc:
+                raise VideoJobError(f"{option} 必须是整数。") from exc
+            if not 1 <= picture_count <= 9:
+                raise VideoJobError("参考图片数量必须在 1 到 9 之间。")
         elif option == "--ratio":
             if value not in ALLOWED_RATIOS:
                 raise VideoJobError("不支持这个画面比例。")
@@ -66,7 +76,7 @@ def parse_video_options(
         raise VideoJobError("请提供视频描述，例如：/video 一只猫娘在雨夜的霓虹街道奔跑")
     if len(prompt) > max_prompt_chars:
         raise VideoJobError(f"视频描述过长，最多 {max_prompt_chars} 个字符。")
-    return prompt, duration, ratio, seed
+    return prompt, duration, ratio, seed, picture_count
 
 
 @dataclass(frozen=True)
@@ -80,6 +90,7 @@ class VideoJob:
     ratio: str
     resolution: str
     seed: int
+    reference_count: int
     status: str
     worker_id: str | None
     lease_until: int | None
@@ -120,6 +131,7 @@ class VideoJobStore:
                 ratio TEXT NOT NULL,
                 resolution TEXT NOT NULL,
                 seed INTEGER NOT NULL,
+                reference_count INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL,
                 worker_id TEXT,
                 lease_until INTEGER,
@@ -142,6 +154,14 @@ class VideoJobStore:
             """
         )
         self._connection.commit()
+        columns = {
+            row["name"] for row in self._connection.execute("PRAGMA table_info(video_jobs)")
+        }
+        if "reference_count" not in columns:
+            self._connection.execute(
+                "ALTER TABLE video_jobs ADD COLUMN reference_count INTEGER NOT NULL DEFAULT 0"
+            )
+            self._connection.commit()
 
     def close(self) -> None:
         with self._lock:
@@ -190,9 +210,15 @@ class VideoJobStore:
         resolution: str,
         seed: int,
         max_queued: int,
+        reference_count: int = 0,
+        job_id: str | None = None,
     ) -> VideoJob:
         now = int(time.time())
-        job_id = uuid.uuid4().hex[:12]
+        job_id = job_id or uuid.uuid4().hex[:12]
+        if not re.fullmatch(r"[0-9a-f]{12}", job_id):
+            raise VideoJobError("无效的视频任务编号。")
+        if not 0 <= reference_count <= 9:
+            raise VideoJobError("参考图片数量必须在 0 到 9 之间。")
         with self._lock:
             connection = self._connection
             connection.execute("BEGIN IMMEDIATE")
@@ -215,9 +241,9 @@ class VideoJobStore:
                     """
                     INSERT INTO video_jobs (
                         id, group_id, user_id, request_message_id, prompt,
-                        duration, ratio, resolution, seed, status,
+                        duration, ratio, resolution, seed, reference_count, status,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
                     """,
                     (
                         job_id,
@@ -229,6 +255,7 @@ class VideoJobStore:
                         ratio,
                         resolution,
                         seed,
+                        reference_count,
                         now,
                         now,
                     ),
@@ -463,7 +490,9 @@ class VideoJobStore:
         path = Path(job.file_path)
         return path if path.is_file() else None
 
-    def cleanup(self, output_dir: Path, ttl_seconds: int) -> int:
+    def cleanup(
+        self, output_dir: Path, ttl_seconds: int, reference_dir: Path | None = None
+    ) -> int:
         cutoff = int(time.time()) - ttl_seconds
         removed = 0
         with self._lock:
@@ -490,6 +519,19 @@ class VideoJobStore:
                     (row["id"],),
                 )
             self._connection.commit()
+            if reference_dir is not None:
+                reference_root = reference_dir.resolve()
+                expired_ids = self._connection.execute(
+                    """
+                    SELECT id FROM video_jobs
+                    WHERE status IN ('completed', 'failed', 'cancelled') AND updated_at < ?
+                    """,
+                    (cutoff,),
+                ).fetchall()
+                for row in expired_ids:
+                    directory = (reference_root / row["id"]).resolve()
+                    if directory.parent == reference_root and directory.is_dir():
+                        shutil.rmtree(directory, ignore_errors=True)
         return removed
 
 

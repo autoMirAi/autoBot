@@ -80,6 +80,7 @@ python workers/comfyui_worker.py
 
 群命令：`/video 描述`、`/video_status [任务号]`、`/video_cancel [任务号]`。
 可选参数必须写在描述前：`-s 15`（也兼容 `--seconds 15` 和 `--duration 15`）、`--ratio 9:16`、`--seed 42`。视频默认 5 秒，最长 30 秒。
+引用一条图片消息后发送 `/video 描述` 会使用该图生成参考图视频。也可以先在群里连续发送图片，再发送 `/video -p 2 描述`，机器人会临时回查该用户最近的 2 张图片；支持 1～9 张，不保存长期用户图片缓存。
 
 NapCat 首次启动后，通过 SSH 隧道访问 WebUI，扫码登录并建立 WebSocket 客户端：
 
