@@ -431,7 +431,7 @@ class VideoWorker:
 
     def wait_for_result(self, job: dict[str, Any], prompt_id: str) -> dict[str, str]:
         started = time.monotonic()
-        timeout_seconds = int(job.get("timeout_seconds", 1800))
+        timeout_seconds = int(job.get("timeout_seconds", 5400))
         last_heartbeat = 0.0
         while True:
             elapsed = time.monotonic() - started
