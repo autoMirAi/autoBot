@@ -79,7 +79,7 @@ python workers/comfyui_worker.py
 ```
 
 群命令：`/video 描述`、`/video_status [任务号]`、`/video_cancel [任务号]`。
-可选参数必须写在描述前：`--ratio 9:16`、`--seconds 5`、`--seed 42`。
+可选参数必须写在描述前：`-s 15`（也兼容 `--seconds 15` 和 `--duration 15`）、`--ratio 9:16`、`--seed 42`。视频默认 5 秒，最长 30 秒。
 
 NapCat 首次启动后，通过 SSH 隧道访问 WebUI，扫码登录并建立 WebSocket 客户端：
 

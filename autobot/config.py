@@ -63,7 +63,7 @@ class Settings:
     video_claim_lease_seconds: int = 90
     video_job_timeout_seconds: int = 1800
     video_file_ttl_seconds: int = 86400
-    video_max_duration_seconds: int = 5
+    video_max_duration_seconds: int = 30
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -95,7 +95,7 @@ class Settings:
             video_claim_lease_seconds=_positive_int("VIDEO_CLAIM_LEASE_SECONDS", 90),
             video_job_timeout_seconds=_positive_int("VIDEO_JOB_TIMEOUT_SECONDS", 1800),
             video_file_ttl_seconds=_positive_int("VIDEO_FILE_TTL_SECONDS", 86400),
-            video_max_duration_seconds=_positive_int("VIDEO_MAX_DURATION_SECONDS", 5),
+            video_max_duration_seconds=_positive_int("VIDEO_MAX_DURATION_SECONDS", 30),
         )
         if settings.video_enabled and len(settings.video_worker_token) < 32:
             raise ValueError("VIDEO_WORKER_TOKEN must contain at least 32 characters")

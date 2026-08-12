@@ -59,6 +59,7 @@ def main() -> int:
             "VIDEO_ENABLED": "true",
             "VIDEO_WORKER_TOKEN": token,
             "VIDEO_PUBLIC_BASE_URL": "http://host.docker.internal:8080",
+            "VIDEO_MAX_DURATION_SECONDS": "30",
         },
     )
 

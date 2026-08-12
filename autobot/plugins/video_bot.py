@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import secrets
-import shlex
 import time
 
 from fastapi import HTTPException, Request
@@ -16,7 +15,7 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, Message
 from nonebot.params import CommandArg
 
 from autobot.config import Settings
-from autobot.video import VideoJob, VideoJobError, VideoJobStore
+from autobot.video import VideoJob, VideoJobError, VideoJobStore, parse_video_options
 
 logger = logging.getLogger(__name__)
 settings = Settings.from_env()
@@ -25,7 +24,6 @@ app = get_app()
 driver = get_driver()
 
 API_PREFIX = "/video-worker/v1"
-ALLOWED_RATIOS = {"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}
 WORKER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 video_matcher = on_command("video", priority=10, block=True)
@@ -176,54 +174,11 @@ async def worker_health(request: Request) -> dict[str, object]:
 
 
 def parse_video_request(text: str) -> tuple[str, int, str, int]:
-    try:
-        parts = shlex.split(text)
-    except ValueError as exc:
-        raise VideoJobError("参数中的引号没有闭合。") from exc
-
-    duration = 5
-    ratio = "16:9"
-    seed = secrets.randbelow(2**32)
-    index = 0
-    while index < len(parts) and parts[index].startswith("--"):
-        option = parts[index]
-        if index + 1 >= len(parts):
-            raise VideoJobError(f"{option} 后缺少参数。")
-        value = parts[index + 1]
-        index += 2
-        if option == "--seconds":
-            try:
-                duration = int(value)
-            except ValueError as exc:
-                raise VideoJobError("--seconds 必须是整数。") from exc
-            if not 5 <= duration <= settings.video_max_duration_seconds:
-                raise VideoJobError(
-                    f"当前仅允许 5 到 {settings.video_max_duration_seconds} 秒视频。"
-                )
-        elif option == "--ratio":
-            if value not in ALLOWED_RATIOS:
-                raise VideoJobError("不支持这个画面比例。")
-            ratio = value
-        elif option == "--seed":
-            try:
-                seed = int(value)
-            except ValueError as exc:
-                raise VideoJobError("--seed 必须是整数。") from exc
-            if not 0 <= seed <= 4294967295:
-                raise VideoJobError("--seed 必须在 0 到 4294967295 之间。")
-        else:
-            raise VideoJobError(f"未知参数：{option}")
-
-    prompt = " ".join(parts[index:]).strip()
-    if not prompt:
-        raise VideoJobError(
-            "请提供视频描述，例如：/video 一只猫娘在雨夜的霓虹街道奔跑"
-        )
-    if len(prompt) > settings.video_max_prompt_chars:
-        raise VideoJobError(
-            f"视频描述过长，最多 {settings.video_max_prompt_chars} 个字符。"
-        )
-    return prompt, duration, ratio, seed
+    return parse_video_options(
+        text,
+        max_duration=settings.video_max_duration_seconds,
+        max_prompt_chars=settings.video_max_prompt_chars,
+    )
 
 
 def _group_allowed(event: GroupMessageEvent) -> bool:

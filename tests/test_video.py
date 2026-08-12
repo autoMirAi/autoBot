@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from autobot.video import VideoJobError, VideoJobStore
+from autobot.video import VideoJobError, VideoJobStore, parse_video_options
 from workers.comfyui_worker import VideoWorker
 
 
@@ -76,6 +76,28 @@ class VideoJobStoreTests(unittest.TestCase):
             self.assertEqual(recovered.worker_id, "worker-new")
             self.assertEqual(recovered.attempts, 2)
             store.close()
+
+
+class VideoRequestTests(unittest.TestCase):
+    def test_defaults_to_five_seconds(self) -> None:
+        prompt, duration, ratio, _ = parse_video_options("a cat running")
+        self.assertEqual((prompt, duration, ratio), ("a cat running", 5, "16:9"))
+
+    def test_short_seconds_option_supports_thirty_seconds(self) -> None:
+        prompt, duration, ratio, _ = parse_video_options("-s 15 --ratio 9:16 neon cat")
+        self.assertEqual((prompt, duration, ratio), ("neon cat", 15, "9:16"))
+
+        _, duration, _, _ = parse_video_options("-s 30 maximum duration")
+        self.assertEqual(duration, 30)
+
+    def test_long_seconds_options_remain_compatible(self) -> None:
+        for option in ("--seconds", "--duration"):
+            _, duration, _, _ = parse_video_options(f"{option} 15 neon cat")
+            self.assertEqual(duration, 15)
+
+    def test_rejects_duration_above_thirty_seconds(self) -> None:
+        with self.assertRaisesRegex(VideoJobError, "5 到 30 秒"):
+            parse_video_options("-s 31 too long")
 
 
 class ComfyUIWorkflowTests(unittest.TestCase):
