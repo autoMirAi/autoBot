@@ -100,6 +100,7 @@ class ComfyUIWorkflowTests(unittest.TestCase):
         self.assertEqual(generator["inputs"]["length"], 124)
         self.assertEqual(workflow["92"]["inputs"]["video"], ["91", 0])
         self.assertEqual(workflow["92"]["inputs"]["format"], "mp4")
+        self.assertEqual(workflow["92"]["inputs"]["codec"], "auto")
 
     def test_finds_nested_video_metadata(self) -> None:
         metadata = VideoWorker._find_video_metadata(

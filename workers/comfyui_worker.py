@@ -286,7 +286,9 @@ class VideoWorker:
                     "video": ["91", 0],
                     "filename_prefix": f"autobot/{job_id}",
                     "format": "mp4",
-                    "codec": {"codec": "auto"},
+                    # DynamicCombo values are sent as the selected key; ComfyUI
+                    # expands this to {"codec": "auto"} before execution.
+                    "codec": "auto",
                 },
             },
         }
