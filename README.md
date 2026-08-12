@@ -47,6 +47,41 @@ sudo systemctl enable --now autobot
 docker compose up -d napcat
 ```
 
+## Windows ComfyUI 视频 Worker
+
+视频任务使用持久化 SQLite 队列，Windows Worker 主动从 server 领取任务，调用本机
+ComfyUI MiniMax H3 工作流，生成完成后把 MP4 上传回 server，再由 NapCat 发回原群。
+ComfyUI 本身只需监听 `127.0.0.1:8188`，不要把 ComfyUI 端口开放到局域网。
+
+server 的 `.env` 至少配置：
+
+```dotenv
+VIDEO_ENABLED=true
+VIDEO_WORKER_TOKEN=<至少 32 字符的随机值>
+VIDEO_PUBLIC_BASE_URL=http://host.docker.internal:8080
+```
+
+Windows 在 `workers/worker.json` 放置未跟踪的配置：
+
+```json
+{
+  "server_url": "http://192.168.8.165:8080/video-worker/v1",
+  "worker_token": "与 server 相同的随机值",
+  "comfy_url": "http://127.0.0.1:8188",
+  "worker_id": "windows-4080",
+  "comfy_api_key": "Comfy API key"
+}
+```
+
+运行：
+
+```powershell
+python workers/comfyui_worker.py
+```
+
+群命令：`/video 描述`、`/video_status [任务号]`、`/video_cancel [任务号]`。
+可选参数必须写在描述前：`--ratio 9:16`、`--seconds 5`、`--seed 42`。
+
 NapCat 首次启动后，通过 SSH 隧道访问 WebUI，扫码登录并建立 WebSocket 客户端：
 
 ```bash

@@ -26,6 +26,9 @@ HELP = """可用命令：
 /ask 问题 - 让 Codex 回答或执行任务（可读写工作区）
 /memory_add 内容 - 追加或合并动态记忆（仅授权用户）
 /memory_del 内容 - 删除或修改动态记忆（仅授权用户）
+/video 描述 - 生成 5 秒 768P 视频
+/video_status [任务号] - 查看视频任务状态
+/video_cancel [任务号] - 取消视频任务
 /reset - 清除当前群聊或私聊的对话上下文
 /status - 查看状态
 /help - 显示帮助
